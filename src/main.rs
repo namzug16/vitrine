@@ -1,3 +1,4 @@
+mod diagrams;
 mod home;
 mod icons;
 mod project;
@@ -19,14 +20,21 @@ struct App {
     projects: Vec<SavedProject>,
     project: Option<Project>,
     image_cache: Option<ImageCache>,
+    diagrams: Option<diagrams::Diagrams>,
 }
 
 fn init() -> App {
-    App { projects: store::load_projects(), project: None, image_cache: None }
+    App { projects: store::load_projects(), project: None, image_cache: None, diagrams: None }
 }
 
 fn setup(s: &mut App, waker: Waker) {
-    s.image_cache = Some(ImageCache::new(waker));
+    s.image_cache = Some(ImageCache::new(waker.clone()));
+    s.diagrams = Some(diagrams::Diagrams::start(waker));
+}
+
+/// Rebuilds the view when a diagram finished drawing on its thread.
+fn poll(s: &mut App, _: f64, _: &mut Tx) -> bool {
+    s.diagrams.as_ref().is_some_and(diagrams::Diagrams::take_changed)
 }
 
 fn view(s: &App, cx: &mut Cx<App>) -> El {
@@ -86,6 +94,7 @@ fn main() {
     rune::App::new(AppSpec {
         on_key: Some(on_key),
         setup: Some(setup),
+        poll: Some(poll),
         families: ("Inter", reader::CODE_FONTS),
         ..AppSpec::new("Vitrine", home::WINDOW_SIZE, init, view)
     })

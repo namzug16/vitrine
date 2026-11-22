@@ -121,7 +121,7 @@ pub fn view(s: &App, k: &Kit, cx: &mut Cx<App>) -> El {
         .min_h(0.0);
     let sidebar = col().w_full().h_full().min_h(0.0).child(tree);
 
-    let reading = col().key("reading-pane").w_full().h_full().min_h(0.0).child(reader::view(p, k));
+    let reading = col().key("reading-pane").w_full().h_full().min_h(0.0).child(reader::view(p, s.diagrams.as_ref().expect("diagrams start in setup"), cx.system_dark(), k));
 
     SplitView::new(reading)
         .sidebar(&p.sidebar, |s: &mut App| &mut project_mut(s).sidebar, sidebar)

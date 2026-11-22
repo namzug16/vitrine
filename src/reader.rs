@@ -10,12 +10,15 @@ use rune_kit::markdown::{Markdown, MarkdownStyle};
 use rune_kit::{Button, ButtonVariant, Kit};
 
 use crate::App;
+use crate::diagrams::{DiagramRequest, Diagrams};
 use crate::project::Project;
 
 // shortcut: fixed until the settings window lets the reader pick fonts.
 const TEXT_FONT: &str = "Departure Mono";
 pub const CODE_FONTS: &str = "Departure Mono, ui-monospace";
 const READING_WIDTH: f32 = 760.0;
+/// The info word `mermaid` fences get, so rune-kit hands them to `code_frame` like other code.
+const DIAGRAM_FENCE: &str = "vitrine-mermaid";
 
 pub enum Document {
     Loaded { source: String, images: HashMap<String, Image> },
@@ -28,7 +31,7 @@ pub fn load(root: &Path, relative: &str, cache: &ImageCache) -> Document {
     let path = root.join(relative);
     match std::fs::read(&path) {
         Ok(bytes) => {
-            let source = String::from_utf8_lossy(&bytes).into_owned();
+            let source = rename_mermaid_fences(&String::from_utf8_lossy(&bytes));
             let folder = path.parent().unwrap_or(root);
             let images = image_sources(&source)
                 .into_iter()
@@ -39,6 +42,24 @@ pub fn load(root: &Path, relative: &str, cache: &ImageCache) -> Document {
         Err(e) if e.kind() == ErrorKind::NotFound => Document::Missing,
         Err(e) => Document::ReadError(e.to_string()),
     }
+}
+
+/// Without its `mermaid` feature rune-kit draws `mermaid` fences as plain code and skips
+/// `code_frame`, so give those fences another info word.
+fn rename_mermaid_fences(source: &str) -> String {
+    let mut out = String::with_capacity(source.len());
+    for line in source.split_inclusive('\n') {
+        let trimmed = line.trim_start();
+        let marker_len = trimmed.len() - trimmed.trim_start_matches(['`', '~']).len();
+        let info = trimmed[marker_len..].trim();
+        if marker_len >= 3 && (info == "mermaid" || info.starts_with("mermaid ")) {
+            let indent = &line[..line.len() - trimmed.len()];
+            out.push_str(&format!("{indent}{}{DIAGRAM_FENCE}{}\n", &trimmed[..marker_len], &info["mermaid".len()..]));
+        } else {
+            out.push_str(line);
+        }
+    }
+    out
 }
 
 fn image_sources(source: &str) -> Vec<String> {
@@ -129,6 +150,25 @@ fn reading_style(k: &Kit) -> MarkdownStyle {
         .code_block_font(TextStyle { family: Family::Mono, size: 13.0, line_height: 20.0, ..k.ty.mono })
 }
 
+/// Draws `mermaid` fences with Pele and leaves other code blocks as they are.
+fn diagram_frame(diagrams: Diagrams, dark: bool, k: Kit) -> impl Fn(rune::El, &rune_kit::markdown::CodeFrame<'_>) -> rune::El + 'static {
+    move |code, frame| {
+        if frame.language != Some(DIAGRAM_FENCE) {
+            return code;
+        }
+        let request = DiagramRequest { source: frame.source.to_owned(), dark, font_family: TEXT_FONT.into(), font_size_points: 15, scale: 2 };
+        match diagrams.get(&request, &k) {
+            Some(Ok(d)) => el().w_full().max_w(d.width_points).aspect_ratio(d.width_points / d.height_points).pixels(&d.pixels),
+            Some(Err(error)) => col()
+                .w_full()
+                .gap(6.0)
+                .child(text(format!("Diagram error: {error}")).font(k.ty.text_small).color(k.c.danger.icon).wrap())
+                .child(code),
+            None => col().w_full().h(120.0).center().child(text("Drawing diagram…").font(k.ty.text_small).color(k.c.text_faint)),
+        }
+    }
+}
+
 fn message(title: &str, detail: String, k: &Kit) -> rune::El {
     col()
         .w_full()
@@ -140,7 +180,7 @@ fn message(title: &str, detail: String, k: &Kit) -> rune::El {
         .child(text(detail).font(k.ty.ui).color(k.c.text_muted).wrap().max_w(460.0))
 }
 
-pub fn view(p: &Project, k: &Kit) -> rune::El {
+pub fn view(p: &Project, diagrams: &Diagrams, dark: bool, k: &Kit) -> rune::El {
     if let Some(error) = &p.scan_error {
         return message("Project folder unavailable", format!("{} can't be read: {error}", p.root.display()), k);
     }
@@ -166,6 +206,7 @@ pub fn view(p: &Project, k: &Kit) -> rune::El {
                 .selectable(true)
                 .images(move |src| images.get(src).cloned())
                 .on_link_tx(follow_link)
+                .code_frame(diagram_frame(diagrams.clone(), dark, k.clone()))
                 .build(k);
             let mut hasher = std::collections::hash_map::DefaultHasher::new();
             relative.hash(&mut hasher);
