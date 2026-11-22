@@ -192,7 +192,7 @@ pub fn view(s: &App, k: &Kit, cx: &mut Cx<App>) -> El {
         .w_full()
         .h_full()
         .min_h(0.0)
-        .child(col().key("reading-pane").w_full().grow(1.0).min_h(0.0).child(reader::view(p, diagrams, cx.system_dark(), k)))
+        .child(col().key("reading-pane").w_full().grow(1.0).min_h(0.0).child(reader::view(p, diagrams, &s.settings, cx.system_dark(), k)))
         .child(status_bar(p, k));
 
     let window = SplitView::new(reading)
@@ -214,8 +214,8 @@ pub fn view(s: &App, k: &Kit, cx: &mut Cx<App>) -> El {
     // The sharper 4x bitmap once drawn, the inline 2x one until then.
     let expanded = p.viewer.as_ref().and_then(|v| {
         let dark = cx.system_dark();
-        let sharp = diagrams.get(&reader::diagram_request(&v.source, dark, 4), k);
-        let inline = || diagrams.get(&reader::diagram_request(&v.source, dark, 2), k);
+        let sharp = diagrams.get(&reader::diagram_request(&v.source, &s.settings, dark, 4), k);
+        let inline = || diagrams.get(&reader::diagram_request(&v.source, &s.settings, dark, 2), k);
         match sharp.or_else(inline) {
             Some(Ok(d)) => Some(viewer::view(v, &d, k)),
             _ => None,

@@ -11,6 +11,7 @@ use rune::{Pixels, Waker};
 use rune_kit::Kit;
 
 const PELE_JS: &str = include_str!("../assets/pele/pele.global.js");
+pub const PELE_VERSION: &str = "1.13.0";
 
 /// What a diagram is drawn for: its source, and the look it takes from the reading pane.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

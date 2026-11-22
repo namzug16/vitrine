@@ -12,10 +12,9 @@ use rune_kit::{Button, ButtonVariant, IconButton, IconButtonVariant, Kit};
 use crate::App;
 use crate::diagrams::{DiagramRequest, Diagrams};
 use crate::project::Project;
+use crate::settings::intern;
+use crate::store::{DEFAULT_FONT_SIZE, Settings};
 
-// shortcut: fixed until the settings window lets the reader pick fonts.
-const TEXT_FONT: &str = "Departure Mono";
-pub const CODE_FONTS: &str = "Departure Mono, ui-monospace";
 const READING_WIDTH: f32 = 760.0;
 /// The info word `mermaid` fences get, so rune-kit hands them to `code_frame` like other code.
 const DIAGRAM_FENCE: &str = "vitrine-mermaid";
@@ -139,29 +138,38 @@ fn follow_link(s: &mut App, target: &str, tx: &mut Tx) {
     }
 }
 
-fn reading_style(k: &Kit) -> MarkdownStyle {
-    let body = TextStyle { family: Family::Named(TEXT_FONT), size: 15.0, line_height: 24.0, ..k.ty.body };
-    let heading = |size, line_height| TextStyle { size, line_height, weight: 600.0, ..body };
+/// Sizes are set for the default 15 pt and scale with the chosen size. Code takes the mono
+/// slot, which holds the chosen code font, so inline code matches it.
+fn reading_style(settings: &Settings, k: &Kit) -> MarkdownStyle {
+    let scale = settings.font_size_points / DEFAULT_FONT_SIZE;
+    let body = TextStyle { family: Family::Named(intern(&settings.text_font_family)), size: 15.0 * scale, line_height: 24.0 * scale, ..k.ty.body };
+    let heading = |size: f32, line_height: f32| TextStyle { size: size * scale, line_height: line_height * scale, weight: 600.0, ..body };
     MarkdownStyle::from_kit(k)
         .body_font(body)
         .heading_font(1, heading(26.0, 34.0))
         .heading_font(2, heading(20.0, 28.0))
         .heading_font(3, heading(16.0, 24.0))
-        .code_block_font(TextStyle { family: Family::Mono, size: 13.0, line_height: 20.0, ..k.ty.mono })
+        .code_block_font(TextStyle { family: Family::Mono, size: 13.0 * scale, line_height: 20.0 * scale, ..k.ty.mono })
 }
 
 /// How the reading pane asks for a diagram; `scale` is device pixels per point.
-pub fn diagram_request(source: &str, dark: bool, scale: u32) -> DiagramRequest {
-    DiagramRequest { source: source.to_owned(), dark, font_family: TEXT_FONT.into(), font_size_points: 15, scale }
+pub fn diagram_request(source: &str, settings: &Settings, dark: bool, scale: u32) -> DiagramRequest {
+    DiagramRequest {
+        source: source.to_owned(),
+        dark,
+        font_family: settings.text_font_family.clone(),
+        font_size_points: settings.font_size_points.round() as u32,
+        scale,
+    }
 }
 
 /// Draws `mermaid` fences with Pele and leaves other code blocks as they are.
-fn diagram_frame(diagrams: Diagrams, dark: bool, k: Kit) -> impl Fn(rune::El, &rune_kit::markdown::CodeFrame<'_>) -> rune::El + 'static {
+fn diagram_frame(diagrams: Diagrams, settings: Settings, dark: bool, k: Kit) -> impl Fn(rune::El, &rune_kit::markdown::CodeFrame<'_>) -> rune::El + 'static {
     move |code, frame| {
         if frame.language != Some(DIAGRAM_FENCE) {
             return code;
         }
-        match diagrams.get(&diagram_request(frame.source, dark, 2), &k) {
+        match diagrams.get(&diagram_request(frame.source, &settings, dark, 2), &k) {
             Some(Ok(d)) => {
                 let source = frame.source.to_owned();
                 let expand = IconButton::new(&crate::icons::MAXIMIZE)
@@ -200,7 +208,7 @@ fn message(title: &str, detail: String, k: &Kit) -> rune::El {
         .child(text(detail).font(k.ty.ui).color(k.c.text_muted).wrap().max_w(460.0))
 }
 
-pub fn view(p: &Project, diagrams: &Diagrams, dark: bool, k: &Kit) -> rune::El {
+pub fn view(p: &Project, diagrams: &Diagrams, settings: &Settings, dark: bool, k: &Kit) -> rune::El {
     if let Some(error) = &p.scan_error {
         return message("Project folder unavailable", format!("{} can't be read: {error}", p.root.display()), k);
     }
@@ -222,11 +230,11 @@ pub fn view(p: &Project, diagrams: &Diagrams, dark: bool, k: &Kit) -> rune::El {
         Document::Loaded { source, images } => {
             let images = images.clone();
             let markdown = Markdown::new(source.as_str())
-                .style(reading_style(k))
+                .style(reading_style(settings, k))
                 .selectable(true)
                 .images(move |src| images.get(src).cloned())
                 .on_link_tx(follow_link)
-                .code_frame(diagram_frame(diagrams.clone(), dark, k.clone()))
+                .code_frame(diagram_frame(diagrams.clone(), settings.clone(), dark, k.clone()))
                 .build(k);
             let mut hasher = std::collections::hash_map::DefaultHasher::new();
             relative.hash(&mut hasher);

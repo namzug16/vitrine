@@ -5,16 +5,18 @@ mod icons;
 mod project;
 mod reader;
 mod scan;
+mod settings;
 mod store;
 mod viewer;
 
 use std::path::PathBuf;
 
-use rune::{AppSpec, Chrome, Cx, El, FileDialogOptions, ImageCache, KeyEvent, MenuItem, Tx, Waker};
+use rune::{AppHandle, AppSpec, Chrome, Cx, El, FileDialogOptions, ImageCache, KeyEvent, MenuItem, Tx, Waker, WindowOptions, WindowSpec};
 use rune_kit::Kit;
 
 use project::Project;
-use store::SavedProject;
+use settings::SettingsWindow;
+use store::{SavedProject, Settings};
 
 const PROJECT_WINDOW_SIZE: (f32, f32) = (1200.0, 780.0);
 
@@ -23,10 +25,18 @@ struct App {
     project: Option<Project>,
     image_cache: Option<ImageCache>,
     diagrams: Option<diagrams::Diagrams>,
+    settings: Settings,
+    settings_window: AppHandle<SettingsWindow>,
 }
 
-fn init() -> App {
-    App { projects: store::load_projects(), project: None, image_cache: None, diagrams: None }
+/// Takes settings changed in the Settings window.
+fn apply_settings(s: &mut App, settings: Settings, tx: &mut Tx) {
+    tx.set_font_families("Inter", settings::code_families(&settings));
+    s.settings = settings;
+}
+
+fn open_settings(s: &mut App, _: &mut Tx) {
+    s.settings_window.open();
 }
 
 fn setup(s: &mut App, waker: Waker) {
@@ -102,16 +112,30 @@ fn on_key(s: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
 
 fn main() {
     rune::prewarm_gpu();
-    rune::App::new(AppSpec {
+    let settings = store::load_settings();
+    let mut app = rune::App::new(AppSpec {
         on_key: Some(on_key),
         setup: Some(setup),
         poll: Some(poll),
-        families: ("Inter", reader::CODE_FONTS),
-        ..AppSpec::new("Vitrine", home::WINDOW_SIZE, init, view)
+        families: ("Inter", settings::code_families(&settings)),
+        ..AppSpec::new("Vitrine", home::WINDOW_SIZE, || unreachable!("App::init builds the state"), view)
     })
-        // Full-size content so the project's split view draws its own toolbar band.
-        .chrome(Chrome { full_size_content: true, traffic_lights: None, drag_regions: true })
-        .menu_item(MenuItem::new("Open Folder…", choose_folder).menu("File").key_equivalent("cmd+o".parse().expect("valid shortcut")))
-        .menu_item(MenuItem::new("Refresh", project::refresh).menu("View").key_equivalent("cmd+r".parse().expect("valid shortcut")))
-        .run();
+    // Full-size content so the project's split view draws its own toolbar band.
+    .chrome(Chrome { full_size_content: true, traffic_lights: None, drag_regions: true })
+    .menu_item(MenuItem::new("Settings…", open_settings).key_equivalent("cmd+,".parse().expect("valid shortcut")))
+    .menu_item(MenuItem::new("Open Folder…", choose_folder).menu("File").key_equivalent("cmd+o".parse().expect("valid shortcut")))
+    .menu_item(MenuItem::new("Refresh", project::refresh).menu("View").key_equivalent("cmd+r".parse().expect("valid shortcut")));
+    let hidden = WindowOptions { visible: false, ..Default::default() };
+    let (settings_window, _) = app.window(WindowSpec::new("settings", settings::spec()).options(hidden));
+    let main_window = app.handle();
+    settings_window.update(move |ui: &mut SettingsWindow, _| ui.main_window = Some(main_window));
+    let app = app.init(move || App {
+        projects: store::load_projects(),
+        project: None,
+        image_cache: None,
+        diagrams: None,
+        settings,
+        settings_window,
+    });
+    app.run();
 }

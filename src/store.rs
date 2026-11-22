@@ -1,10 +1,14 @@
-//! Saved projects, as JSON in `~/Library/Application Support/Vitrine`.
+//! Saved projects and settings, as JSON in `~/Library/Application Support/Vitrine`.
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+
+pub const DEFAULT_FONT: &str = "Departure Mono";
+pub const DEFAULT_FONT_SIZE: f32 = 15.0;
+pub const FONT_SIZE_RANGE: (f32, f32) = (10.0, 28.0);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SavedProject {
@@ -15,6 +19,20 @@ pub struct SavedProject {
 impl SavedProject {
     pub fn name(&self) -> String {
         self.path.file_name().map_or_else(|| self.path.display().to_string(), |n| n.to_string_lossy().into_owned())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Settings {
+    pub text_font_family: String,
+    pub code_font_family: String,
+    pub font_size_points: f32,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Settings { text_font_family: DEFAULT_FONT.into(), code_font_family: DEFAULT_FONT.into(), font_size_points: DEFAULT_FONT_SIZE }
     }
 }
 
@@ -46,6 +64,16 @@ pub fn remove_project(path: &Path) -> Vec<SavedProject> {
     projects.retain(|p| p.path != path);
     save("projects.json", &projects);
     projects
+}
+
+pub fn load_settings() -> Settings {
+    let mut settings: Settings = load("settings.json");
+    settings.font_size_points = settings.font_size_points.clamp(FONT_SIZE_RANGE.0, FONT_SIZE_RANGE.1);
+    settings
+}
+
+pub fn save_settings(settings: &Settings) {
+    save("settings.json", settings);
 }
 
 fn load<T: DeserializeOwned + Default>(file: &str) -> T {
