@@ -1,0 +1,20 @@
+[package]
+name = "vitrine"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Read-only macOS reader for Markdown artifacts from coding agents"
+
+[dependencies]
+# Rune is pre-release: pin a rev of `dev` and update it on purpose.
+rune = { git = "https://github.com/anomalyco/rune", rev = "3f0d9973526818bae62c89c483fbd144a2a19669" }
+rune-kit = { git = "https://github.com/anomalyco/rune", rev = "3f0d9973526818bae62c89c483fbd144a2a19669", features = ["markdown"] }
+
+# Rune's own crates.io patches: a dependency's `[patch]` doesn't reach the app that builds it.
+[patch.crates-io]
+wgpu-hal = { git = "https://github.com/anomalyco/rune", rev = "3f0d9973526818bae62c89c483fbd144a2a19669" }
+winit = { git = "https://github.com/anomalyco/rune", rev = "3f0d9973526818bae62c89c483fbd144a2a19669" }
+sctk-adwaita = { git = "https://github.com/anomalyco/rune", rev = "3f0d9973526818bae62c89c483fbd144a2a19669" }
+parley_engine = { git = "https://github.com/anomalyco/rune", rev = "3f0d9973526818bae62c89c483fbd144a2a19669" }
+accesskit_windows = { git = "https://github.com/anomalyco/rune", rev = "3f0d9973526818bae62c89c483fbd144a2a19669" }
+accesskit_macos = { git = "https://github.com/anomalyco/rune", rev = "3f0d9973526818bae62c89c483fbd144a2a19669" }

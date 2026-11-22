@@ -1,0 +1,3 @@
+# The git CLI honours the user's url rewrites and SSH keys when fetching Rune.
+[net]
+git-fetch-with-cli = true
