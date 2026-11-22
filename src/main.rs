@@ -86,6 +86,11 @@ fn on_key(s: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
         viewer::close(s);
         return true;
     }
+    // The View menu takes ⌘R first in a window; this catches it where no menu does (headless).
+    if ev.is_command('r') && s.project.is_some() {
+        project::refresh(s, tx);
+        return true;
+    }
     // ⌘W leaves a project for the welcome screen; on the welcome screen it closes the window.
     if ev.is_command('w') && s.project.is_some() {
         close_project(s, tx);
@@ -106,5 +111,6 @@ fn main() {
         // Full-size content so the project's split view draws its own toolbar band.
         .chrome(Chrome { full_size_content: true, traffic_lights: None, drag_regions: true })
         .menu_item(MenuItem::new("Open Folder…", choose_folder).menu("File").key_equivalent("cmd+o".parse().expect("valid shortcut")))
+        .menu_item(MenuItem::new("Refresh", project::refresh).menu("View").key_equivalent("cmd+r".parse().expect("valid shortcut")))
         .run();
 }

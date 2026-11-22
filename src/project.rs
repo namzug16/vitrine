@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use rune::{Cx, El, Tx, col};
 use rune_kit::shell::{PaneState, SplitView, Toolbar};
-use rune_kit::{FileNode, FileTree, Kit, Tree, TreeItem, TreeModel, TreeStyle};
+use rune_kit::{FileNode, FileTree, IconButton, IconButtonVariant, Kit, Tree, TreeItem, TreeModel, TreeStyle};
 
 use crate::reader::{self, Document};
 use crate::viewer::{self, Viewer};
@@ -68,7 +68,9 @@ impl Project {
                 self.tree.set_expanded(&id, true);
             }
         }
-        if let Some(file) = &self.selected_file {
+        if let Some(file) = &self.selected_file
+            && self.tree.contains(file)
+        {
             self.tree.select(file);
         }
     }
@@ -105,6 +107,14 @@ pub fn reload_selected(s: &mut App, _: &mut Tx) {
     p.document = p.selected_file.as_deref().map(|relative| reader::load(&p.root, relative, cache));
 }
 
+/// Rescans the folder and rereads the selected file: the only way Vitrine sees changes on disk.
+pub fn refresh(s: &mut App, tx: &mut Tx) {
+    let Some(p) = s.project.as_mut() else { return };
+    p.rescan();
+    // A file gone from disk leaves the tree with the rescan and shows the missing-file state.
+    reload_selected(s, tx);
+}
+
 pub fn view(s: &App, k: &Kit, cx: &mut Cx<App>) -> El {
     let p = project(s);
     let tree = Tree::new(|s: &App| &project(s).tree, |s: &mut App| &mut project_mut(s).tree, |n: &FileNode<()>| n.name.as_str())
@@ -130,7 +140,18 @@ pub fn view(s: &App, k: &Kit, cx: &mut Cx<App>) -> El {
 
     let window = SplitView::new(reading)
         .sidebar(&p.sidebar, |s: &mut App| &mut project_mut(s).sidebar, sidebar)
-        .toolbar(Toolbar::new().title(p.name()))
+        .toolbar(
+            Toolbar::new().title(p.name()).trailing(
+                IconButton::new(&icons::REFRESH)
+                    .variant(IconButtonVariant::GhostMuted)
+                    .label("Refresh")
+                    .help("Refresh")
+                    .shortcut("⌘R")
+                    .on_press_tx(refresh)
+                    .build(k)
+                    .key("refresh"),
+            ),
+        )
         .titlebar_inset(cx.titlebar_inset())
         .build(k);
     // The sharper 4x bitmap once drawn, the inline 2x one until then.
