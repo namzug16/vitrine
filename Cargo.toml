@@ -7,7 +7,7 @@ description = "Read-only macOS reader for Markdown artifacts from coding agents"
 
 [dependencies]
 pulldown-cmark = { version = "0.13", default-features = false }
-resvg = { version = "0.45", default-features = false, features = ["text", "system-fonts"] }
+resvg = { version = "0.45", default-features = false, features = ["text", "system-fonts", "memmap-fonts", "raster-images"] }
 rquickjs = "0.14"
 # Rune is pre-release: pin a rev of `dev` and update it on purpose.
 rune = { git = "https://github.com/anomalyco/rune", rev = "3f0d9973526818bae62c89c483fbd144a2a19669", features = ["native-file-dialog"] }
@@ -25,3 +25,6 @@ parley_engine = { git = "https://github.com/anomalyco/rune", rev = "3f0d99735268
 accesskit_windows = { git = "https://github.com/anomalyco/rune", rev = "3f0d9973526818bae62c89c483fbd144a2a19669" }
 accesskit_macos = { git = "https://github.com/anomalyco/rune", rev = "3f0d9973526818bae62c89c483fbd144a2a19669" }
 
+# QuickJS and resvg take seconds per diagram unoptimised; keep debug builds usable.
+[profile.dev.package."*"]
+opt-level = 3

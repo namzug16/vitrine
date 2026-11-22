@@ -12,6 +12,13 @@ use rune_kit::Kit;
 
 const PELE_JS: &str = include_str!("../assets/pele/pele.global.js");
 pub const PELE_VERSION: &str = "1.13.0";
+/// The largest bitmap drawn, in pixels: big flowcharts at 4x would take hundreds of megabytes
+/// and draw nothing.
+const MAX_PIXELS: f32 = 16_000_000.0;
+const MAX_SIDE_PIXELS: f32 = 8192.0;
+/// Fonts tried first for characters the reading font lacks. The default fallback takes the first
+/// font in the database that has the character, often LastResort, whose glyphs are all boxes.
+const FALLBACK_FAMILIES: [&str; 3] = ["Apple Color Emoji", "Apple Symbols", "Arial Unicode MS"];
 
 /// What a diagram is drawn for: its source, and the look it takes from the reading pane.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -114,7 +121,8 @@ fn install_measurer(context: &rquickjs::Context, fonts: &usvg::fontdb::Database,
         };
         let measure = rquickjs::Function::new(ctx.clone(), move |label: String, size: f64, _style: i32| -> f64 {
             let Ok(face) = ttf_parser::Face::parse(&data, index) else { return label.chars().count() as f64 * size * 0.6 };
-            let advance: u32 = label.chars().map(|c| face.glyph_index(c).and_then(|g| face.glyph_hor_advance(g)).unwrap_or(0) as u32).sum();
+            // A character the font lacks is drawn from a fallback font: count it as one em, an emoji's width.
+            let advance: u32 = label.chars().map(|c| face.glyph_index(c).and_then(|g| face.glyph_hor_advance(g)).unwrap_or(face.units_per_em()) as u32).sum();
             advance as f64 / face.units_per_em() as f64 * size
         })
         .expect("measure function");
@@ -134,7 +142,9 @@ fn render_svg(context: &rquickjs::Context, request: &DiagramRequest) -> Result<S
                  try { return { svg: pele.render(src, options).svg }; } catch (e) { return { error: String(e && e.message || e) }; } }",
             )
             .map_err(|e| e.to_string())?;
-        let result: rquickjs::Object = render.call((request.source.as_str(), options)).map_err(|e| e.to_string())?;
+        // Emoji variation selectors (U+FE0E, U+FE0F) have no glyph in any font and draw as boxes.
+        let source = request.source.replace(['\u{FE0E}', '\u{FE0F}'], "");
+        let result: rquickjs::Object = render.call((source, options)).map_err(|e| e.to_string())?;
         match result.get::<_, Option<String>>("svg").map_err(|e| e.to_string())? {
             Some(svg) => Ok(svg),
             None => Err(result.get::<_, String>("error").unwrap_or_else(|_| "Pele failed".into())),
@@ -213,10 +223,12 @@ fn substitute_vars(svg: &str, lookup: &dyn Fn(&str) -> Option<String>, keep_unkn
 }
 
 fn rasterise(svg: &str, fonts: &Arc<usvg::fontdb::Database>, request: &DiagramRequest) -> Result<Diagram, String> {
-    let options = usvg::Options { fontdb: fonts.clone(), font_family: request.font_family.clone(), ..Default::default() };
+    let font_resolver = usvg::FontResolver { select_fallback: Box::new(select_fallback), ..Default::default() };
+    let options = usvg::Options { fontdb: fonts.clone(), font_family: request.font_family.clone(), font_resolver, ..Default::default() };
     let tree = usvg::Tree::from_str(svg, &options).map_err(|e| e.to_string())?;
     let size = tree.size();
-    let scale = request.scale as f32;
+    let (width, height) = (size.width(), size.height());
+    let scale = (request.scale as f32).min((MAX_PIXELS / (width * height)).sqrt()).min(MAX_SIDE_PIXELS / width.max(height));
     let mut pixmap = tiny_skia::Pixmap::new((size.width() * scale).ceil() as u32, (size.height() * scale).ceil() as u32).ok_or("The diagram is empty")?;
     resvg::render(&tree, tiny_skia::Transform::from_scale(scale, scale), &mut pixmap.as_mut());
     let rgba = pixmap.pixels().iter().flat_map(|p| {
@@ -226,4 +238,15 @@ fn rasterise(svg: &str, fonts: &Arc<usvg::fontdb::Database>, request: &DiagramRe
     let pixels = Pixels::new();
     pixels.set(pixmap.width(), pixmap.height(), rgba.collect());
     Ok(Diagram { pixels, width_points: size.width(), height_points: size.height() })
+}
+
+/// A font for `c` that the text's fonts (`used`) lack: the fallback families first, then any font
+/// but LastResort.
+fn select_fallback(c: char, used: &[usvg::fontdb::ID], fonts: &mut Arc<usvg::fontdb::Database>) -> Option<usvg::fontdb::ID> {
+    let has_char = |id| fonts.with_face_data(id, |data, index| ttf_parser::Face::parse(data, index).is_ok_and(|face| face.glyph_index(c).is_some()));
+    let usable = |id: usvg::fontdb::ID| !used.contains(&id) && has_char(id) == Some(true);
+    let preferred = FALLBACK_FAMILIES
+        .iter()
+        .filter_map(|family| fonts.query(&usvg::fontdb::Query { families: &[usvg::fontdb::Family::Name(family)], ..Default::default() }));
+    preferred.chain(fonts.faces().filter(|face| face.families.iter().all(|(name, _)| name != "LastResort")).map(|face| face.id)).find(|&id| usable(id))
 }
