@@ -7,6 +7,7 @@ use rune_kit::shell::{PaneState, SplitView, Toolbar};
 use rune_kit::{FileNode, FileTree, Kit, Tree, TreeItem, TreeModel, TreeStyle};
 
 use crate::reader::{self, Document};
+use crate::viewer::{self, Viewer};
 use crate::{App, icons, scan};
 
 pub struct Project {
@@ -18,6 +19,8 @@ pub struct Project {
     /// Why the folder couldn't be scanned, when it couldn't.
     pub scan_error: Option<String>,
     pub sidebar: PaneState,
+    /// The expanded diagram, over the document.
+    pub viewer: Option<Viewer>,
 }
 
 impl Project {
@@ -29,6 +32,7 @@ impl Project {
             document: None,
             scan_error: None,
             sidebar: PaneState::new(260.0).range(180.0, 480.0),
+            viewer: None,
         };
         project.rescan();
         project
@@ -121,11 +125,23 @@ pub fn view(s: &App, k: &Kit, cx: &mut Cx<App>) -> El {
         .min_h(0.0);
     let sidebar = col().w_full().h_full().min_h(0.0).child(tree);
 
-    let reading = col().key("reading-pane").w_full().h_full().min_h(0.0).child(reader::view(p, s.diagrams.as_ref().expect("diagrams start in setup"), cx.system_dark(), k));
+    let diagrams = s.diagrams.as_ref().expect("diagrams start in setup");
+    let reading = col().key("reading-pane").w_full().h_full().min_h(0.0).child(reader::view(p, diagrams, cx.system_dark(), k));
 
-    SplitView::new(reading)
+    let window = SplitView::new(reading)
         .sidebar(&p.sidebar, |s: &mut App| &mut project_mut(s).sidebar, sidebar)
         .toolbar(Toolbar::new().title(p.name()))
         .titlebar_inset(cx.titlebar_inset())
-        .build(k)
+        .build(k);
+    // The sharper 4x bitmap once drawn, the inline 2x one until then.
+    let expanded = p.viewer.as_ref().and_then(|v| {
+        let dark = cx.system_dark();
+        let sharp = diagrams.get(&reader::diagram_request(&v.source, dark, 4), k);
+        let inline = || diagrams.get(&reader::diagram_request(&v.source, dark, 2), k);
+        match sharp.or_else(inline) {
+            Some(Ok(d)) => Some(viewer::view(v, &d, k)),
+            _ => None,
+        }
+    });
+    rune_kit::root(window, expanded)
 }

@@ -5,9 +5,9 @@ use std::hash::{Hash, Hasher};
 use std::io::ErrorKind;
 use std::path::{Component, Path, PathBuf};
 
-use rune::{Family, Image, ImageCache, TextStyle, Tx, col, el, text};
+use rune::{Family, Image, ImageCache, TextStyle, Tx, col, el, row, text};
 use rune_kit::markdown::{Markdown, MarkdownStyle};
-use rune_kit::{Button, ButtonVariant, Kit};
+use rune_kit::{Button, ButtonVariant, IconButton, IconButtonVariant, Kit};
 
 use crate::App;
 use crate::diagrams::{DiagramRequest, Diagrams};
@@ -150,15 +150,35 @@ fn reading_style(k: &Kit) -> MarkdownStyle {
         .code_block_font(TextStyle { family: Family::Mono, size: 13.0, line_height: 20.0, ..k.ty.mono })
 }
 
+/// How the reading pane asks for a diagram; `scale` is device pixels per point.
+pub fn diagram_request(source: &str, dark: bool, scale: u32) -> DiagramRequest {
+    DiagramRequest { source: source.to_owned(), dark, font_family: TEXT_FONT.into(), font_size_points: 15, scale }
+}
+
 /// Draws `mermaid` fences with Pele and leaves other code blocks as they are.
 fn diagram_frame(diagrams: Diagrams, dark: bool, k: Kit) -> impl Fn(rune::El, &rune_kit::markdown::CodeFrame<'_>) -> rune::El + 'static {
     move |code, frame| {
         if frame.language != Some(DIAGRAM_FENCE) {
             return code;
         }
-        let request = DiagramRequest { source: frame.source.to_owned(), dark, font_family: TEXT_FONT.into(), font_size_points: 15, scale: 2 };
-        match diagrams.get(&request, &k) {
-            Some(Ok(d)) => el().w_full().max_w(d.width_points).aspect_ratio(d.width_points / d.height_points).pixels(&d.pixels),
+        match diagrams.get(&diagram_request(frame.source, dark, 2), &k) {
+            Some(Ok(d)) => {
+                let source = frame.source.to_owned();
+                let expand = IconButton::new(&crate::icons::MAXIMIZE)
+                    .variant(IconButtonVariant::GhostMuted)
+                    .label("Expand diagram")
+                    .help("Expand diagram")
+                    .on_press(move |s: &mut App| {
+                        if let Some(p) = s.project.as_mut() {
+                            p.viewer = Some(crate::viewer::Viewer::new(source.clone()));
+                        }
+                    })
+                    .build(&k);
+                col()
+                    .w_full()
+                    .child(row().w_full().justify_end().child(expand))
+                    .child(el().w_full().max_w(d.width_points).aspect_ratio(d.width_points / d.height_points).pixels(&d.pixels))
+            }
             Some(Err(error)) => col()
                 .w_full()
                 .gap(6.0)

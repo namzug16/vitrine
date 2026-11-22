@@ -5,6 +5,7 @@ mod project;
 mod reader;
 mod scan;
 mod store;
+mod viewer;
 
 use std::path::PathBuf;
 
@@ -81,6 +82,10 @@ fn close_project(s: &mut App, tx: &mut Tx) {
 }
 
 fn on_key(s: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    if ev.key == rune::Key::Escape && s.project.as_ref().is_some_and(|p| p.viewer.is_some()) {
+        viewer::close(s);
+        return true;
+    }
     // ⌘W leaves a project for the welcome screen; on the welcome screen it closes the window.
     if ev.is_command('w') && s.project.is_some() {
         close_project(s, tx);
