@@ -35,6 +35,28 @@ fn apply_settings(s: &mut App, settings: Settings, tx: &mut Tx) {
     s.settings = settings;
 }
 
+/// ⌘+, ⌘− and ⌘0: the same setting as the Settings window's stepper, kept in step with it.
+fn set_font_size(s: &mut App, tx: &mut Tx, edit: impl FnOnce(&mut Settings)) {
+    let mut settings = s.settings.clone();
+    edit(&mut settings);
+    store::save_settings(&settings);
+    let shown = settings.clone();
+    s.settings_window.update(move |ui: &mut SettingsWindow, _| ui.settings = shown);
+    apply_settings(s, settings, tx);
+}
+
+fn bigger(s: &mut App, tx: &mut Tx) {
+    set_font_size(s, tx, |x| settings::step_font_size(x, 1.0));
+}
+
+fn smaller(s: &mut App, tx: &mut Tx) {
+    set_font_size(s, tx, |x| settings::step_font_size(x, -1.0));
+}
+
+fn actual_size(s: &mut App, tx: &mut Tx) {
+    set_font_size(s, tx, |x| x.font_size_points = store::DEFAULT_FONT_SIZE);
+}
+
 fn open_settings(s: &mut App, _: &mut Tx) {
     s.settings_window.open();
 }
@@ -102,6 +124,16 @@ fn on_key(s: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
         project::refresh(s, tx);
         return true;
     }
+    let font_size_action: Option<fn(&mut App, &mut Tx)> = match ev.key {
+        rune::Key::Command('=' | '+') => Some(bigger),
+        rune::Key::Command('-') => Some(smaller),
+        rune::Key::Command('0') => Some(actual_size),
+        _ => None,
+    };
+    if let Some(action) = font_size_action {
+        action(s, tx);
+        return true;
+    }
     // ⌘W leaves a project for the welcome screen; on the welcome screen it closes the window.
     if ev.is_command('w') && s.project.is_some() {
         close_project(s, tx);
@@ -124,7 +156,11 @@ fn main() {
     .chrome(Chrome { full_size_content: true, traffic_lights: None, drag_regions: true })
     .menu_item(MenuItem::new("Settings…", open_settings).key_equivalent("cmd+,".parse().expect("valid shortcut")))
     .menu_item(MenuItem::new("Open Folder…", choose_folder).menu("File").key_equivalent("cmd+o".parse().expect("valid shortcut")))
-    .menu_item(MenuItem::new("Refresh", project::refresh).menu("View").key_equivalent("cmd+r".parse().expect("valid shortcut")));
+    .menu_item(MenuItem::new("Refresh", project::refresh).menu("View").key_equivalent("cmd+r".parse().expect("valid shortcut")))
+    .menu_item(MenuItem::separator().menu("View"))
+    .menu_item(MenuItem::new("Bigger", bigger).menu("View").key_equivalent("cmd+=".parse().expect("valid shortcut")))
+    .menu_item(MenuItem::new("Smaller", smaller).menu("View").key_equivalent("cmd+-".parse().expect("valid shortcut")))
+    .menu_item(MenuItem::new("Actual Size", actual_size).menu("View").key_equivalent("cmd+0".parse().expect("valid shortcut")));
     let hidden = WindowOptions { visible: false, ..Default::default() };
     let (settings_window, _) = app.window(WindowSpec::new("settings", settings::spec()).options(hidden));
     let main_window = app.handle();

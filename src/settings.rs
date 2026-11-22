@@ -12,7 +12,7 @@ use crate::store::{self, FONT_SIZE_RANGE, Settings};
 pub const WINDOW_SIZE: (f32, f32) = (520.0, 560.0);
 
 pub struct SettingsWindow {
-    settings: Settings,
+    pub settings: Settings,
     /// Installed font families, filled by a background thread.
     loaded_families: Arc<Mutex<Option<Vec<String>>>>,
     family_options: Vec<ComboboxOption>,
