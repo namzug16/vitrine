@@ -172,20 +172,25 @@ fn diagram_frame(diagrams: Diagrams, settings: Settings, dark: bool, k: Kit) -> 
         match diagrams.get(&diagram_request(frame.source, &settings, dark, 2), &k) {
             Some(Ok(d)) => {
                 let source = frame.source.to_owned();
+                let open_viewer = move |s: &mut App| {
+                    if let Some(p) = s.project.as_mut() {
+                        p.viewer = Some(crate::viewer::Viewer::new(source.clone()));
+                    }
+                };
                 let expand = IconButton::new(&crate::icons::MAXIMIZE)
                     .variant(IconButtonVariant::GhostMuted)
                     .label("Expand diagram")
                     .help("Expand diagram")
-                    .on_press(move |s: &mut App| {
-                        if let Some(p) = s.project.as_mut() {
-                            p.viewer = Some(crate::viewer::Viewer::new(source.clone()));
-                        }
-                    })
+                    .on_press(open_viewer.clone())
                     .build(&k);
-                col()
+                let picture = el()
                     .w_full()
-                    .child(row().w_full().justify_end().child(expand))
-                    .child(el().w_full().max_w(d.width_points).aspect_ratio(d.width_points / d.height_points).pixels(&d.pixels))
+                    .max_w(d.width_points)
+                    .aspect_ratio(d.width_points / d.height_points)
+                    .pixels(&d.pixels)
+                    .cursor(rune::Cursor::Pointer)
+                    .on_press(open_viewer);
+                col().w_full().child(row().w_full().justify_end().child(expand)).child(picture)
             }
             Some(Err(error)) => col()
                 .w_full()
