@@ -1,4 +1,5 @@
 mod diagrams;
+mod git;
 mod home;
 mod icons;
 mod project;
