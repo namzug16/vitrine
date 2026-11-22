@@ -153,7 +153,7 @@ fn main() {
         ..AppSpec::new("Vitrine", home::WINDOW_SIZE, || unreachable!("App::init builds the state"), view)
     })
     // Full-size content so the project's split view draws its own toolbar band.
-    .chrome(Chrome { full_size_content: true, traffic_lights: None, drag_regions: true })
+    .chrome(Chrome { full_size_content: true, traffic_lights: Some((16.0, 25.0)), drag_regions: true })
     .menu_item(MenuItem::new("Settings…", open_settings).key_equivalent("cmd+,".parse().expect("valid shortcut")))
     .menu_item(MenuItem::new("Open Folder…", choose_folder).menu("File").key_equivalent("cmd+o".parse().expect("valid shortcut")))
     .menu_item(MenuItem::new("Refresh", project::refresh).menu("View").key_equivalent("cmd+r".parse().expect("valid shortcut")))

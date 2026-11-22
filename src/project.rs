@@ -3,8 +3,8 @@
 use std::path::PathBuf;
 
 use rune::{Cx, El, Tx, col, row, text};
-use rune_kit::shell::{PaneState, SplitView, Toolbar};
-use rune_kit::{Badge, BadgeVariant, FileNode, FileTree, IconButton, IconButtonVariant, Kit, Tree, TreeItem, TreeModel, TreeStyle};
+use rune_kit::shell::{PaneState, SidebarToggle, SplitView, Toolbar};
+use rune_kit::{Badge, BadgeVariant, ControlSize, FileNode, FileTree, IconButton, IconButtonVariant, Kit, Tree, TreeItem, TreeModel, glyphs};
 
 use crate::reader::{self, Document};
 use crate::viewer::{self, Viewer};
@@ -39,12 +39,21 @@ impl Project {
             git: None,
         };
         project.rescan();
+        let root_id = project.name();
+        if project.tree.contains(&root_id) {
+            project.tree.set_expanded(&root_id, true);
+        }
         project.git = git::inspect(&project.root, None);
         project
     }
 
     pub fn name(&self) -> String {
         self.root.file_name().map_or_else(|| self.root.display().to_string(), |n| n.to_string_lossy().into_owned())
+    }
+
+    /// The tree's id for a project-relative path: the tree's root row is the project folder.
+    fn tree_id(&self, relative: &str) -> String {
+        format!("{}/{relative}", self.name())
     }
 
     /// Rebuilds the tree from disk, keeping the folders that were open and still exist.
@@ -67,16 +76,16 @@ impl Project {
                 Vec::new()
             }
         };
-        self.tree = FileTree::new().compact_folders(false).build(files.into_iter().map(|path| (path, ())));
+        self.tree = FileTree::new().compact_folders(false).build(files.into_iter().map(|path| (self.tree_id(&path), ())));
         for id in expanded {
             if self.tree.contains(&id) {
                 self.tree.set_expanded(&id, true);
             }
         }
-        if let Some(file) = &self.selected_file
-            && self.tree.contains(file)
+        if let Some(id) = self.selected_file.as_deref().map(|relative| self.tree_id(relative))
+            && self.tree.contains(&id)
         {
-            self.tree.select(file);
+            self.tree.select(&id);
         }
     }
 }
@@ -90,16 +99,20 @@ fn project_mut(s: &mut App) -> &mut Project {
 }
 
 fn select_file(s: &mut App, id: &str, tx: &mut Tx) {
-    if project(s).tree.get(id).is_some_and(|n| !n.dir) {
-        open_file(s, id, tx);
+    let p = project(s);
+    if p.tree.get(id).is_some_and(|n| !n.dir)
+        && let Some(relative) = id.strip_prefix(&format!("{}/", p.name()))
+    {
+        open_file(s, relative, tx);
     }
 }
 
 /// Shows `relative` in the reading pane, selecting it in the tree when it's there.
 pub fn open_file(s: &mut App, relative: &str, tx: &mut Tx) {
     let p = project_mut(s);
-    if p.tree.contains(relative) {
-        p.tree.reveal(relative, tx);
+    let id = p.tree_id(relative);
+    if p.tree.contains(&id) {
+        p.tree.reveal(&id, tx);
     }
     p.selected_file = Some(relative.to_owned());
     reload_selected(s, tx);
@@ -171,15 +184,8 @@ pub fn view(s: &App, k: &Kit, cx: &mut Cx<App>) -> El {
     let p = project(s);
     let tree = Tree::new(|s: &App| &project(s).tree, |s: &mut App| &mut project_mut(s).tree, |n: &FileNode<()>| n.name.as_str())
         .name("Markdown files")
-        .style(TreeStyle::from_kit(k).chevron(&icons::CHEVRON_DOWN))
-        .row(|n, r| {
-            let icon = match (n.dir, r.expanded) {
-                (true, Some(true)) => &icons::FOLDER_OPEN,
-                (true, _) => &icons::FOLDER,
-                (false, _) => &icons::FILE_TEXT,
-            };
-            TreeItem::new(n.name.clone()).icon(icon)
-        })
+        // Every file is Markdown, `.markdown` too, which the kit's icon-by-extension misses.
+        .row(|n, r| if n.dir { TreeItem::file(n, r) } else { TreeItem::new(n.name.clone()).icon(&glyphs::FILE_TEXT) })
         .on_select(select_file)
         .build(s, k)
         .key("tree")
@@ -195,10 +201,11 @@ pub fn view(s: &App, k: &Kit, cx: &mut Cx<App>) -> El {
         .child(col().key("reading-pane").w_full().grow(1.0).min_h(0.0).child(reader::view(p, diagrams, &s.settings, cx.system_dark(), k)))
         .child(status_bar(p, k));
 
+    let title = p.selected_file.as_deref().and_then(|f| f.rsplit('/').next()).map_or_else(|| p.name(), str::to_owned);
     let window = SplitView::new(reading)
         .sidebar(&p.sidebar, |s: &mut App| &mut project_mut(s).sidebar, sidebar)
         .toolbar(
-            Toolbar::new().title(p.name()).trailing(
+            Toolbar::new().title(title).trailing(
                 IconButton::new(&icons::REFRESH)
                     .variant(IconButtonVariant::GhostMuted)
                     .label("Refresh")
@@ -210,6 +217,10 @@ pub fn view(s: &App, k: &Kit, cx: &mut Cx<App>) -> El {
             ),
         )
         .titlebar_inset(cx.titlebar_inset())
+        .frame_inset(8.0)
+        .toolbar_in_panel()
+        .sidebar_padding(10.0, 10.0)
+        .sidebar_toggle(SidebarToggle::new().size(ControlSize::Large).past_lights(16.0).edge(18.0).gap(4.0).in_header())
         .build(k);
     // The sharper 4x bitmap once drawn, the inline 2x one until then.
     let expanded = p.viewer.as_ref().and_then(|v| {
