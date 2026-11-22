@@ -18,3 +18,10 @@ sctk-adwaita = { git = "https://github.com/anomalyco/rune", rev = "3f0d997352681
 parley_engine = { git = "https://github.com/anomalyco/rune", rev = "3f0d9973526818bae62c89c483fbd144a2a19669" }
 accesskit_windows = { git = "https://github.com/anomalyco/rune", rev = "3f0d9973526818bae62c89c483fbd144a2a19669" }
 accesskit_macos = { git = "https://github.com/anomalyco/rune", rev = "3f0d9973526818bae62c89c483fbd144a2a19669" }
+
+# Renderer spike only (examples/renderer_spike.rs); removed once a renderer is chosen.
+[dev-dependencies]
+rune-kit = { git = "https://github.com/anomalyco/rune", rev = "3f0d9973526818bae62c89c483fbd144a2a19669", features = ["mermaid"] }
+rquickjs = "0.14"
+resvg = { version = "0.45", default-features = false, features = ["text", "system-fonts"] }
+ttf-parser = "0.25"
