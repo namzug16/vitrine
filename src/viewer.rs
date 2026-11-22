@@ -125,5 +125,6 @@ pub fn view(v: &Viewer, diagram: &Diagram, k: &Kit) -> El {
         .border(1.0, k.c.border_base)
         .child(toolbar)
         .child(canvas);
-    el().key("diagram-viewer").absolute(0.0, 0.0).w_full().h_full().padding(24.0).fill(k.c.scrim).child(panel)
+    // The top padding clears the traffic lights, which sit over the window's top-left corner.
+    el().key("diagram-viewer").absolute(0.0, 0.0).w_full().h_full().padding(24.0).pt(48.0).fill(k.c.scrim).child(panel)
 }
