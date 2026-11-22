@@ -4,7 +4,7 @@ use rune::{Cursor, El, col, el, row, text};
 use rune_kit::{Button, ButtonVariant, Kit};
 
 use crate::App;
-use crate::store::Project;
+use crate::store::SavedProject;
 
 pub const WINDOW_SIZE: (f32, f32) = (820.0, 480.0);
 
@@ -17,6 +17,7 @@ pub fn view(s: &App, k: &Kit) -> El {
         .gap(8.0)
         .center()
         .fill(c.surface_base)
+        .window_drag()
         .child(text("Vitrine").font(rune::TextStyle { size: 34.0, weight: 600.0, ..k.ty.ui }).color(c.text_strong))
         .child(text(format!("Version {}", env!("CARGO_PKG_VERSION"))).font(k.ty.small).color(c.text_muted))
         .child(el().h(24.0))
@@ -39,7 +40,7 @@ pub fn view(s: &App, k: &Kit) -> El {
     row().w_full().h_full().fill(c.bg_base).child(intro).child(col().grow(1.0).h_full().min_w(0.0).child(list))
 }
 
-fn project_row(project: &Project, k: &Kit) -> El {
+fn project_row(project: &SavedProject, k: &Kit) -> El {
     let c = &k.c;
     let path = project.path.clone();
     let available = path.is_dir();

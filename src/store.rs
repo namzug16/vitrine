@@ -7,12 +7,12 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Project {
+pub struct SavedProject {
     pub path: PathBuf,
     pub last_opened_unix_seconds: u64,
 }
 
-impl Project {
+impl SavedProject {
     pub fn name(&self) -> String {
         self.path.file_name().map_or_else(|| self.path.display().to_string(), |n| n.to_string_lossy().into_owned())
     }
@@ -24,24 +24,24 @@ fn storage_dir() -> PathBuf {
 }
 
 /// Projects, most recently opened first.
-pub fn load_projects() -> Vec<Project> {
-    let mut projects: Vec<Project> = load("projects.json");
+pub fn load_projects() -> Vec<SavedProject> {
+    let mut projects: Vec<SavedProject> = load("projects.json");
     projects.sort_by_key(|p| std::cmp::Reverse(p.last_opened_unix_seconds));
     projects
 }
 
 /// Saves `path` as opened now, updating its entry if it has one, and returns the new list.
-pub fn record_project_opened(path: &Path) -> Vec<Project> {
+pub fn record_project_opened(path: &Path) -> Vec<SavedProject> {
     let mut projects = load_projects();
     projects.retain(|p| p.path != path);
     let now = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs());
-    projects.insert(0, Project { path: path.to_owned(), last_opened_unix_seconds: now });
+    projects.insert(0, SavedProject { path: path.to_owned(), last_opened_unix_seconds: now });
     save("projects.json", &projects);
     projects
 }
 
 /// Forgets a saved project. The folder itself is untouched.
-pub fn remove_project(path: &Path) -> Vec<Project> {
+pub fn remove_project(path: &Path) -> Vec<SavedProject> {
     let mut projects = load_projects();
     projects.retain(|p| p.path != path);
     save("projects.json", &projects);
