@@ -2,10 +2,11 @@
 
 use std::path::PathBuf;
 
-use rune::{Cx, El, Tx, col, text};
+use rune::{Cx, El, Tx, col};
 use rune_kit::shell::{PaneState, SplitView, Toolbar};
 use rune_kit::{FileNode, FileTree, Kit, Tree, TreeItem, TreeModel, TreeStyle};
 
+use crate::reader::{self, Document};
 use crate::{App, icons, scan};
 
 pub struct Project {
@@ -13,6 +14,7 @@ pub struct Project {
     pub tree: TreeModel<FileNode<()>>,
     /// Project-relative path of the file in the reading pane.
     pub selected_file: Option<String>,
+    pub document: Option<Document>,
     /// Why the folder couldn't be scanned, when it couldn't.
     pub scan_error: Option<String>,
     pub sidebar: PaneState,
@@ -24,6 +26,7 @@ impl Project {
             root,
             tree: TreeModel::new(),
             selected_file: None,
+            document: None,
             scan_error: None,
             sidebar: PaneState::new(260.0).range(180.0, 480.0),
         };
@@ -75,11 +78,27 @@ fn project_mut(s: &mut App) -> &mut Project {
     s.project.as_mut().expect("project view needs an open project")
 }
 
-fn select_file(s: &mut App, id: &str, _: &mut Tx) {
-    let p = project_mut(s);
-    if p.tree.get(id).is_some_and(|n| !n.dir) {
-        p.selected_file = Some(id.to_owned());
+fn select_file(s: &mut App, id: &str, tx: &mut Tx) {
+    if project(s).tree.get(id).is_some_and(|n| !n.dir) {
+        open_file(s, id, tx);
     }
+}
+
+/// Shows `relative` in the reading pane, selecting it in the tree when it's there.
+pub fn open_file(s: &mut App, relative: &str, tx: &mut Tx) {
+    let p = project_mut(s);
+    if p.tree.contains(relative) {
+        p.tree.reveal(relative, tx);
+    }
+    p.selected_file = Some(relative.to_owned());
+    reload_selected(s, tx);
+}
+
+/// Reads the selected file again from disk.
+pub fn reload_selected(s: &mut App, _: &mut Tx) {
+    let cache = s.image_cache.as_ref().expect("image cache made in setup");
+    let p = s.project.as_mut().expect("project view needs an open project");
+    p.document = p.selected_file.as_deref().map(|relative| reader::load(&p.root, relative, cache));
 }
 
 pub fn view(s: &App, k: &Kit, cx: &mut Cx<App>) -> El {
@@ -102,9 +121,7 @@ pub fn view(s: &App, k: &Kit, cx: &mut Cx<App>) -> El {
         .min_h(0.0);
     let sidebar = col().w_full().h_full().min_h(0.0).child(tree);
 
-    let reading = col().key("reading-pane").w_full().h_full().center().child(
-        text(p.selected_file.clone().unwrap_or_else(|| "Select a Markdown file".into())).font(k.ty.ui).color(k.c.text_muted),
-    );
+    let reading = col().key("reading-pane").w_full().h_full().min_h(0.0).child(reader::view(p, k));
 
     SplitView::new(reading)
         .sidebar(&p.sidebar, |s: &mut App| &mut project_mut(s).sidebar, sidebar)

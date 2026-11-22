@@ -32,6 +32,6 @@ pub fn markdown_files(root: &Path) -> io::Result<Vec<String>> {
     Ok(found)
 }
 
-fn is_markdown(name: &str) -> bool {
+pub fn is_markdown(name: &str) -> bool {
     Path::new(name).extension().is_some_and(|e| e.eq_ignore_ascii_case("md") || e.eq_ignore_ascii_case("markdown"))
 }

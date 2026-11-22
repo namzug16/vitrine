@@ -1,12 +1,13 @@
 mod home;
 mod icons;
 mod project;
+mod reader;
 mod scan;
 mod store;
 
 use std::path::PathBuf;
 
-use rune::{AppSpec, Chrome, Cx, El, FileDialogOptions, KeyEvent, MenuItem, Tx};
+use rune::{AppSpec, Chrome, Cx, El, FileDialogOptions, ImageCache, KeyEvent, MenuItem, Tx, Waker};
 use rune_kit::Kit;
 
 use project::Project;
@@ -17,10 +18,15 @@ const PROJECT_WINDOW_SIZE: (f32, f32) = (1200.0, 780.0);
 struct App {
     projects: Vec<SavedProject>,
     project: Option<Project>,
+    image_cache: Option<ImageCache>,
 }
 
 fn init() -> App {
-    App { projects: store::load_projects(), project: None }
+    App { projects: store::load_projects(), project: None, image_cache: None }
+}
+
+fn setup(s: &mut App, waker: Waker) {
+    s.image_cache = Some(ImageCache::new(waker));
 }
 
 fn view(s: &App, cx: &mut Cx<App>) -> El {
@@ -77,7 +83,12 @@ fn on_key(s: &mut App, ev: &KeyEvent, tx: &mut Tx) -> bool {
 
 fn main() {
     rune::prewarm_gpu();
-    rune::App::new(AppSpec { on_key: Some(on_key), ..AppSpec::new("Vitrine", home::WINDOW_SIZE, init, view) })
+    rune::App::new(AppSpec {
+        on_key: Some(on_key),
+        setup: Some(setup),
+        families: ("Inter", reader::CODE_FONTS),
+        ..AppSpec::new("Vitrine", home::WINDOW_SIZE, init, view)
+    })
         // Full-size content so the project's split view draws its own toolbar band.
         .chrome(Chrome { full_size_content: true, traffic_lights: None, drag_regions: true })
         .menu_item(MenuItem::new("Open Folder…", choose_folder).menu("File").key_equivalent("cmd+o".parse().expect("valid shortcut")))
